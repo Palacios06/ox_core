@@ -55,14 +55,15 @@ export async function CreateVehicle(
   if (!data.vin && (data.owner || data.group)) data.vin = await OxVehicle.generateVin(vehicleData);
   if (data.vin && !data.owner && !data.group) delete data.vin;
 
-  data.plate = data.vin
-    ? data.plate!
-    : data.plate && (await IsPlateAvailable(data.plate))
-      ? data.plate
-      : await OxVehicle.generatePlate();
+  data.plate = data.plate && data.owner ? data.plate : (data.plate && await IsPlateAvailable(data.plate) ? data.plate : await OxVehicle.generatePlate());
 
   const metadata = data.data || ({} as { properties: VehicleProperties; [key: string]: any });
   metadata.properties = metadata.properties || data.properties;
+
+  metadata.properties = {
+    ...metadata.properties,
+    plate: data.plate,
+  };
 
   if (!data.id && data.vin) {
     data.id = await CreateNewVehicle(
@@ -71,7 +72,7 @@ export async function CreateVehicle(
       data.owner || null,
       data.group || null,
       data.model,
-      vehicleData.class,
+      vehicleData.class || 0,
       metadata,
       data.stored || null
     );
