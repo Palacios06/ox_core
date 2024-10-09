@@ -1,11 +1,19 @@
 import { ClassInterface } from 'classInterface';
 import { DeleteVehicle, IsPlateAvailable, IsVinAvailable, SaveVehicleData, SetVehicleColumn } from './db';
-import { getRandomString, getRandomAlphanumeric, getRandomChar, getRandomInt } from '@overextended/ox_lib';
+import {
+  getRandomString,
+  getRandomAlphanumeric,
+  getRandomChar,
+  getRandomInt,
+  VehicleProperties,
+} from '@overextended/ox_lib';
 import { PLATE_PATTERN } from '../../common/config';
 import type { Dict, VehicleData } from 'types';
 import { GetVehicleData, GetVehicleNetworkType } from '../../common/vehicles';
 import { setVehicleProperties } from '@overextended/ox_lib/server';
 import { Vector3 } from '@nativewrappers/fivem';
+
+const setEntityOrphanMode = typeof SetEntityOrphanMode !== 'undefined' ? SetEntityOrphanMode : () => {};
 
 export class OxVehicle extends ClassInterface {
   entity: number;
@@ -19,6 +27,7 @@ export class OxVehicle extends ClassInterface {
   owner?: number;
   group?: string;
   #metadata: Dict<any>;
+  #properties: VehicleProperties;
   #stored: string | null;
 
   protected static members: Dict<OxVehicle> = {};
@@ -29,7 +38,18 @@ export class OxVehicle extends ClassInterface {
   };
 
   static spawn(model: string, coords: Vector3, heading?: number) {
-    return CreateVehicleServerSetter(model, GetVehicleNetworkType(model), coords.x, coords.y, coords.z, heading || 0);
+    const entityId = CreateVehicleServerSetter(
+      model,
+      GetVehicleNetworkType(model),
+      coords.x,
+      coords.y,
+      coords.z,
+      heading || 0
+    );
+
+    setEntityOrphanMode(entityId, 2);
+
+    return entityId;
   }
 
   /** Get an instance of OxVehicle with the matching entityId. */
@@ -120,6 +140,7 @@ export class OxVehicle extends ClassInterface {
     make: string,
     stored: string | null,
     metadata: Dict<any>,
+    properties: VehicleProperties,
     id?: number,
     vin?: string,
     owner?: number,
@@ -136,13 +157,14 @@ export class OxVehicle extends ClassInterface {
     this.vin = vin;
     this.owner = owner;
     this.group = group;
+    this.#properties = properties;
     this.#metadata = metadata || {};
     this.#stored = stored;
 
     if (this.id) this.setStored(null, false);
 
     OxVehicle.add(this.entity, this);
-    setVehicleProperties(entity, metadata.properties);
+    setVehicleProperties(entity, properties);
     emit('ox:spawnedVehicle', this.entity, this.id);
   }
 
@@ -160,10 +182,14 @@ export class OxVehicle extends ClassInterface {
     return Entity(this.entity).state;
   }
 
+  getStored() {
+    return this.#stored;
+  }
+
   #getSaveData() {
     if (!this.id) return;
 
-    return [this.#stored, JSON.stringify(this.#metadata), this.id];
+    return [this.#stored, JSON.stringify({ ...this.#metadata, properties: this.#properties }), this.id];
   }
 
   save() {
@@ -216,6 +242,12 @@ export class OxVehicle extends ClassInterface {
     SetVehicleColumn(this.id, 'plate', this.plate);
   }
 
+  setProperties(properties: VehicleProperties, apply?: boolean) {
+    this.#properties = properties;
+
+    if (apply) setVehicleProperties(this.entity, this.#properties);
+  }
+
   async respawn(coords?: Vector3, rotation?: Vector3) {
     const hasEntity = DoesEntityExist(this.entity);
     coords = Vector3.fromObject(coords || hasEntity ? GetEntityCoords(this.entity) : null);
@@ -231,7 +263,7 @@ export class OxVehicle extends ClassInterface {
     if (rotation) SetEntityRotation(this.entity, rotation.x, rotation.y, rotation.z, 2, false);
 
     OxVehicle.add(this.entity, this);
-    setVehicleProperties(this.entity, this.#metadata.properties);
+    setVehicleProperties(this.entity, this.#properties);
     emit('ox:spawnedVehicle', this.entity, this.id);
   }
 }
