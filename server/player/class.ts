@@ -167,8 +167,13 @@ export class OxPlayer extends ClassInterface {
   setActiveGroup(groupName?: string, temp?: boolean) {
     if (!this.charId || (groupName && !(groupName in this.#groups))) return false;
 
-    SetActiveGroup(this.charId, temp ? undefined : groupName);
+    const currentActiveGroup = this.get('activeGroup');
 
+    if (currentActiveGroup) GlobalState[`${currentActiveGroup}:activeCount`] -= 1;
+
+    if (groupName) GlobalState[`${groupName}:activeCount`] += 1;
+
+    SetActiveGroup(this.charId, temp ? undefined : groupName);
     this.set('activeGroup', groupName, true);
     emit('ox:setActiveGroup', this.source, groupName);
 
@@ -394,6 +399,8 @@ export class OxPlayer extends ClassInterface {
 
     this.#groups[group.name] = grade;
     GlobalState[`${group.name}:count`] += 1;
+
+    if (group.name === this.get('activeGroup')) GlobalState[`${group.name}:activeCount`] += 1;
   }
 
   /** Removes the active character from the group and sets permissions. */
@@ -405,6 +412,8 @@ export class OxPlayer extends ClassInterface {
 
     delete this.#groups[group.name];
     GlobalState[`${group.name}:count`] -= 1;
+
+    if (group.name === this.get('activeGroup')) GlobalState[`${group.name}:activeCount`] -= 1;
   }
 
   /** Saves the active character to the database. */
